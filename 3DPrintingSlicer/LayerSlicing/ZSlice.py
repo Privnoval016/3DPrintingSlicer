@@ -1,5 +1,4 @@
 import numpy as np
-from numba import njit
 from collections import defaultdict
 
 class ZSlice:
