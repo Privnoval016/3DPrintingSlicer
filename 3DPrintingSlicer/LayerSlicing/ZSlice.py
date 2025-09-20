@@ -1,4 +1,5 @@
 import numpy as np
+from numba import njit
 from collections import defaultdict
 
 class ZSlice:
@@ -45,27 +46,13 @@ class ZSlice:
                 sliced_edges.append(edge)
 
         for i1, i2, i3 in faces:
-            tri = [vertices[i1], vertices[i2], vertices[i3]]
-            z_vals = [v[2] for v in tri]
+            tri = np.array([vertices[i1], vertices[i2], vertices[i3]])
+            z_vals = np.array([v[2] for v in tri])
 
             if all(abs(z - self.z0) < eps for z in z_vals): # skip coplanar triangles
                 continue
 
-            points = []
-
-            for v, z in zip(tri, z_vals): # Check vertices on the plane
-                if abs(z - self.z0) < eps:
-                    points.append((v[0], v[1], self.z0))
-
-            edges_tri = [(0, 1), (1, 2), (2, 0)]
-            for a, b in edges_tri: # Check edges crossing the plane
-                v1, v2 = tri[a], tri[b]
-                z1, z2 = v1[2], v2[2]
-                if (z1 - self.z0) * (z2 - self.z0) < -eps:
-                    t = (self.z0 - z1) / (z2 - z1)
-                    x = v1[0] + t * (v2[0] - v1[0])
-                    y = v1[1] + t * (v2[1] - v1[1])
-                    points.append((x, y, self.z0))
+            points = face_slicing(tri, z_vals, self.z0, eps)
 
             unique = []
             for p in points:
@@ -89,6 +76,29 @@ class ZSlice:
 
         self.vertices = np.array(sliced_vertices)
         self.edges = np.array(sliced_edges)
+        self.normals = np.array(sliced_normals)
+
+        print(f"num edges: {len(self.edges)}, num normals: {len(self.normals)}, num vertices: {len(self.vertices)}")
+
+
+def face_slicing(tri, z_vals, z0, eps=1e-9):
+    points = []
+
+    for v, z in zip(tri, z_vals):  # Check vertices on the plane
+        if abs(z - z0) < eps:
+            points.append((v[0], v[1], z0))
+
+    edges_tri = [(0, 1), (1, 2), (2, 0)]
+    for a, b in edges_tri:  # Check edges crossing the plane
+        v1, v2 = tri[a], tri[b]
+        z1, z2 = v1[2], v2[2]
+        if (z1 - z0) * (z2 - z0) < -eps:
+            t = (z0 - z1) / (z2 - z1)
+            x = v1[0] + t * (v2[0] - v1[0])
+            y = v1[1] + t * (v2[1] - v1[1])
+            points.append((x, y, z0))
+
+    return points
 
 
 

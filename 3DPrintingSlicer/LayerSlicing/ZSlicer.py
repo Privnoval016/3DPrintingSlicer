@@ -3,7 +3,6 @@ import struct
 
 from LayerSlicing.ZSlice import ZSlice
 
-
 def get_min_max_z(vertices):
     max_z = np.max(vertices[:, 2])
     min_z = np.min(vertices[:, 2])
@@ -23,11 +22,16 @@ class ZSlicer:
     def get_slices(self):
         return self.z_slices
 
-    def compute_slices_from_stl(self, is_ascii, file_name, num_slices=50):
+    def compute_slices_from_stl(self, is_ascii, file_name, specify_height=False, num=50):
         self.load_ascii_stl(file_name) if is_ascii else self.read_binary_stl(file_name)
         self.min_z, self.max_z = get_min_max_z(self.vertices)
 
-        z_range = np.linspace(self.min_z, self.max_z, num_slices)
+        if specify_height:
+            z_range = np.arange(self.min_z, self.max_z + num, num)
+        else:
+            z_range = np.linspace(self.min_z, self.max_z, num)
+
+        z_range[-1] = self.max_z - 1e-5
 
         self.z_slices = []
 
@@ -86,7 +90,7 @@ class ZSlicer:
         faces = []
         normals = []
 
-        vertex_map = {}  # deduplicate vertices
+        vertex_map = {}
 
         def add_vertex(v):
             key = tuple(round(x, 9) for x in v)
