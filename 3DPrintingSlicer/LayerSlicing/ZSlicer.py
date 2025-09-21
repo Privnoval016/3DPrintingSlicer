@@ -18,17 +18,32 @@ class ZSlicer:
         self.normals = np.empty((0, 3)) # list of normals (n_x, n_y, n_z) for each face
         self.min_z = 0
         self.max_z = 0
+        self.file_name = ""
 
     def get_slices(self):
         return self.z_slices
 
-    def compute_slices_from_stl(self, is_ascii, file_name, specify_height=False, num=50):
+    def compute_slices_from_stl(self, file_name, specify_height=False, num=50):
+        self.file_name = file_name
+
+        is_ascii = False
+
+        with open(file_name, "rb") as f:
+            header = f.read(80)
+            is_ascii = b"solid" in header[:5].lower()
+
         self.load_ascii_stl(file_name) if is_ascii else self.read_binary_stl(file_name)
         self.min_z, self.max_z = get_min_max_z(self.vertices)
 
         if specify_height:
+            if num >= (self.max_z - self.min_z) / 2 or num <= 0:
+                print("Layer height too large for model height.")
+                return
             z_range = np.arange(self.min_z, self.max_z + num, num)
         else:
+            if num <= 1:
+                print("Number of layers must be greater than 1.")
+                return
             z_range = np.linspace(self.min_z, self.max_z, num)
 
         z_range[-1] = self.max_z - 1e-5

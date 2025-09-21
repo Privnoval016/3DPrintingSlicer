@@ -77,7 +77,7 @@ class ZSlice:
         self.edges = np.array(sliced_edges)
         self.normals = np.array(sliced_normals)
 
-        print(f"num edges: {len(self.edges)}, num normals: {len(self.normals)}, num vertices: {len(self.vertices)}")
+        print(self.vertices)
 
 
 def face_slicing(tri, z_vals, z0, eps=1e-9):
