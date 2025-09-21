@@ -3,7 +3,12 @@ import os
 import numpy as np
 import struct
 
+from Infill.InfillGenerator import InfillGenerator
+from Infill.InfillSlice import InfillSlice
+from Infill.TopBottomDetection import TopBottomDetection
 from LayerSlicing.ZSlice import ZSlice
+from Perimeters.PerimeterGenerator import PerimeterGenerator
+
 
 def get_min_max_z(vertices):
     max_z = np.max(vertices[:, 2])
@@ -33,6 +38,7 @@ def check_if_ascii(filename):
 class ZSlicer:
     def __init__(self):
         self.z_slices = []
+        self.infill_slices = []
         self.vertices = np.empty((0, 3)) # list of vertices (x, y, z)
         self.edges = np.empty((0, 2), dtype=int) # list of (index1, index2) of vertices
         self.faces = np.empty((0, 3), dtype=int) # list of (index1, index2, index3) of vertices
@@ -41,10 +47,33 @@ class ZSlicer:
         self.max_z = 0
         self.file_name = ""
 
+    def generate_infill_slices(self, line_width, wall_count):
+        self.infill_slices = []
+
+        for z_slice in self.get_slices():
+            z0 = z_slice.z0
+            perimeter_generator = PerimeterGenerator(z_slice)
+            perimeters = perimeter_generator.createPerimeters(line_width,
+                                                              wall_count)
+
+            top_bottom_detector = TopBottomDetection(self)
+            top_polygons, bottom_polygons = top_bottom_detector.getPolygonsfromZ()
+
+            infill_generator = InfillGenerator(top_polygons, bottom_polygons)
+            infill = infill_generator.create_infill(
+                perimeter_generator.polygons, line_width, wall_count,
+                z_slice.z0)
+            infill_vertices, infill_edges = infill_generator.get_vertices_edges()
+
+            infill_slice = InfillSlice(z0, perimeters, infill_vertices,
+                                       infill_edges)
+            z_slice.infill_slice = infill_slice
+            self.infill_slices.append(infill_slice)
+
     def get_slices(self):
         return self.z_slices
 
-    def compute_slices_from_stl(self, file_name, specify_height=False, num=50):
+    def compute_slices_from_stl(self, file_name, specify_height=False, num=50, line_width=0.5, wall_count=4):
         self.file_name = file_name
 
         is_ascii = check_if_ascii(file_name)
@@ -72,6 +101,8 @@ class ZSlicer:
             z_slice.slice_mesh(self.vertices, self.faces, self.normals)
 
             self.z_slices.append(z_slice)
+
+        self.generate_infill_slices(line_width, wall_count)
 
     def load_ascii_stl(self, filename):
         vertices = []

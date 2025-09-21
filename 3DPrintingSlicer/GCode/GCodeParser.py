@@ -68,6 +68,9 @@ class GCodeEvaluator:
                 if not line.startswith('G') or not line:
                     continue
 
+                if ';' in line:
+                    line = line.split(';')[0].strip()
+
                 parts = line.split()
 
                 cmd = parts[0]

@@ -60,36 +60,39 @@ class PerimeterGenerator:
                 if not adjacency[b]:
                     del adjacency[b]
 
-                all_polygons = []
-                for vertex_indices in polygon_indices:
-                    vertices = []
-                    for vertex in vertex_indices:
-                        vertices.append(z_slice.vertices[vertex])
-                    all_polygons.append(Polygon(vertices))
+        # Now process all loops to polygons
+        all_polygons = []
+        for vertex_indices in polygon_indices:
+            vertices = [z_slice.vertices[v] for v in vertex_indices]
+            all_polygons.append(Polygon(vertices))
 
-                depth = []
-                for polygon in all_polygons:
-                    point = polygon.representative_point()
-                    depth.append(sum(1 for other in all_polygons if
-                                     other != polygon and other.contains(
-                                         point)))
+        # Determine depth for holes
+        depth = []
+        for polygon in all_polygons:
+            point = polygon.representative_point()
+            depth.append(sum(1 for other in all_polygons if
+                             other != polygon and other.contains(
+                                 point)))
 
-                polygons = []
-                polygon_depths = []
-                for i, polygon in enumerate(all_polygons):
-                    if depth[i] % 2 == 0:
-                        polygon_depths.append(depth[i])
-                        polygons.append(polygon)
+        # Outer polygons
+        polygons = []
+        polygon_depths = []
+        for i, polygon in enumerate(all_polygons):
+            if depth[i] % 2 == 0:
+                polygons.append(polygon)
+                polygon_depths.append(depth[i])
 
-                for i, polygon in enumerate(all_polygons):
-                    if depth[i] % 2 == 1:
-                        for j, other in enumerate(polygons):
-                            if depth[i] + 1 == polygon_depths[
-                                j] and other.contains(
-                                    polygon.representative_point()):
-                                other = shapely.union_all((other, polygon))
+        # Merge holes into outer polygons
+        for i, polygon in enumerate(all_polygons):
+            if depth[i] % 2 == 1:
+                for j, outer in enumerate(polygons):
+                    if outer.contains(
+                            polygon.representative_point()):
+                        polygons[j] = shapely.union_all(
+                            [outer, polygon])
+                        break
 
-                return polygons
+        return polygons
 
     def __init__(self, z_slice):
         self.z_slice = z_slice

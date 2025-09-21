@@ -9,11 +9,18 @@ class GCodeGenerator:
 
 
     def generate_gcode(self, output_file):
+
+        if not self.infill_slice_info:
+            print("No infill slice information available.")
+            return False
+
         with open(output_file, 'w') as f:
             self.g_code_setup(f)
             for infill_slice in self.infill_slice_info:
                 self.g_code_for_slice(infill_slice, f)
             self.g_code_conclusion(f)
+
+        return True
 
 
     def g_code_setup(self, f):
@@ -59,14 +66,14 @@ class GCodeGenerator:
 
         f.write(f"; Beginning perimeters\n")
 
-        for polygon in infill_slice.perimeters:
+        for polygon in infill_slice.polygons:
             if not polygon.is_valid or polygon.is_empty:
                 continue
 
             f.write(f"; New perimeter\n")
 
             exterior_coords = list(polygon.exterior.coords)
-            f.write(f"G1 X{exterior_coords[0][0]:.2f} Y{exterior_coords[0][1]:.2f} F3000 ; Move to start of perimeter\n")
+            f.write(f"G1 X{exterior_coords[0][0] + 117:.2f} Y{exterior_coords[0][1] + 117:.2f} F3000 ; Move to start of perimeter\n")
             f.write("G1 E0 ; Start extrusion\n")
 
             for i in range(1, len(exterior_coords)):
@@ -75,33 +82,33 @@ class GCodeGenerator:
                 distance = ((x - prev_x) ** 2 + (y - prev_y) ** 2) ** 0.5
                 extrusion_amount = distance * extrusion_per_mm
                 total_extrusion += extrusion_amount
-                f.write(f"G1 X{x:.2f} Y{y:.2f} E{total_extrusion:.5f} F1500 ; Extrude\n")
+                f.write(f"G1 X{x + 117:.2f} Y{y + 117:.2f} E{total_extrusion:.5f} F1500 ; Extrude\n")
 
             prev_x, prev_y = exterior_coords[-1]
             x, y = exterior_coords[0]
             distance = ((x - prev_x) ** 2 + (y - prev_y) ** 2) ** 0.5
             extrusion_amount = distance * extrusion_per_mm
             total_extrusion += extrusion_amount
-            f.write(f"G1 X{x:.2f} Y{y:.2f} E{total_extrusion:.5f} F1500 ; Close perimeter\n")
+            f.write(f"G1 X{x + 117:.2f} Y{y + 117:.2f} E{total_extrusion:.5f} F1500 ; Close perimeter\n")
 
             f.write(f"G1 E-1 F3000 ; Retract filament\n")
 
         f.write(f"; End of perimeters, beginning infill\n")
 
         for edge in infill_slice.infill_edges:
-            start_vertex = infill_slice.vertices[edge[0]]
-            end_vertex = infill_slice.vertices[edge[1]]
+            start_vertex = infill_slice.infill_vertices[edge[0]]
+            end_vertex = infill_slice.infill_vertices[edge[1]]
 
             x1, y1 = start_vertex[0], start_vertex[1]
             x2, y2 = end_vertex[0], end_vertex[1]
 
-            f.write(f"G1 X{x1:.2f} Y{y1:.2f} F3000 ; Move to start of infill line\n")
+            f.write(f"G1 X{x1 + 117:.2f} Y{y1 + 117:.2f} F3000 ; Move to start of infill line\n")
             f.write("G1 E0 ; Start extrusion\n")
 
             distance = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
             extrusion_amount = distance * extrusion_per_mm
             total_extrusion += extrusion_amount
-            f.write(f"G1 X{x2:.2f} Y{y2:.2f} E{total_extrusion:.5f} F1500 ; Extrude infill line\n")
+            f.write(f"G1 X{x2 + 117:.2f} Y{y2 + 117:.2f} E{total_extrusion:.5f} F1500 ; Extrude infill line\n")
 
             f.write(f"G1 E-1 F3000 ; Retract filament\n")
 

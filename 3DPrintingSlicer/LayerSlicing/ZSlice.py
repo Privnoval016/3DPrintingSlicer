@@ -7,6 +7,7 @@ class ZSlice:
         self.edges = np.empty((0, 2), dtype=int) # list of (index1, index2) of vertices
         self.normals = np.empty((0, 3)) # list of normals (n_x, n_y, 0) for each edge
         self.z0 = z # z value of the slicing plane
+        self.infill_slice = None
 
 
     def slice_mesh(self, vertices, faces, normals, eps=1e-9):
@@ -16,8 +17,6 @@ class ZSlice:
         edge_count = defaultdict(int) # to count occurrences of each edge
         sliced_edges = [] # list of (index1, index2) of vertices in sliced_vertices
         sliced_normals = [] # list of normals (n_x, n_y, 0) for each edge
-
-        print("Starting slice at z =", self.z0)
 
         def add_vertex(p):
             key = (round(p[0], 9), round(p[1], 9), round(p[2], 9))
@@ -76,8 +75,6 @@ class ZSlice:
         self.vertices = np.array(sliced_vertices)
         self.edges = np.array(sliced_edges)
         self.normals = np.array(sliced_normals)
-
-        print(self.vertices)
 
 
 def face_slicing(tri, z_vals, z0, eps=1e-9):

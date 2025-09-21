@@ -3,10 +3,12 @@ from shapely.geometry import LineString, MultiLineString, Polygon
 from shapely.ops import unary_union, linemerge
 
 class InfillGenerator:
-    def __init__(self, line_spacing=1.0, tolerance=0.1, max_iterations=100):
+    def __init__(self, top_polygons, bottom_polygons, line_spacing=1.0, tolerance=0.1, max_iterations=100):
         self.line_spacing = line_spacing
         self.tolerance = tolerance
         self.max_iterations = max_iterations
+        self.top_polygons = top_polygons
+        self.bottom_polygons = bottom_polygons
         self.multi_line_string = MultiLineString()
 
     def gyroid_slice(self, x, z, vertical=False):
@@ -18,14 +20,14 @@ class InfillGenerator:
             b = -z_cos
             res = z_sin * np.cos(x + phase)
             r = np.sqrt(a**2 + b**2)
-            return np.arcsin(np.clip(a/r, -1, 1)) + np.arcsin(np.clip(res/r, -1,1)) + np.pi
+            return z_sin * (np.arcsin(np.clip(a/r, -1, 1))) + np.arcsin(np.clip(res/r, -1,1)) + np.pi
         else:
             phase = 0 if z_sin >= 0 else np.pi
             a = np.cos(x + phase)
             b = -z_sin
             res = z_cos * np.sin(x + phase)
             r = np.sqrt(a**2 + b**2)
-            return np.arcsin(np.clip(a/r,-1,1)) + np.arcsin(np.clip(res/r,-1,1)) + 0.5*np.pi
+            return z_cos * (np.arcsin(np.clip(a/r,-1,1))) + np.arcsin(np.clip(res/r,-1,1)) + 0.5*np.pi
 
     def make_one_period(self, width, height, z, vertical=False):
         if (vertical):
@@ -57,6 +59,8 @@ class InfillGenerator:
         lines = []
         offset = -wave_spacing/2
         while offset < height:
+            if (len(x_vals) < 2 or len(y_vals) < 2):
+                break
             if (vertical):
                 coords = [((x+minx-offset*1.25), y+miny) for x,y in zip(y_vals, x_vals)] #swap
             else:
@@ -97,12 +101,22 @@ class InfillGenerator:
                 elif hasattr(c,"geoms"):
                     clipped.extend([g for g in c.geoms if isinstance(g, LineString)])
 
-        merged = linemerge(unary_union(clipped))
+        filtered = [line for line in clipped if
+                    isinstance(line, LineString) and line.length > 1e-12]
+
+        if not filtered:
+            self.multi_line_string = MultiLineString([])
+            return MultiLineString([])
+
+        merged = linemerge(filtered)
         if isinstance(merged, LineString):
             merged = [merged]
-        return MultiLineString(merged)
+
+        self.multi_line_string = MultiLineString(merged)
+        return self.multi_line_string
     
     def lineString_to_edges(self, line):
+        current_vertex = 0
         infill_vertices = []
         infill_edges = []
         verticies = list(line)
@@ -113,21 +127,32 @@ class InfillGenerator:
             infill_edges.append((current_vertex, current_vertex+1))
             current_vertex +=1
         return infill_vertices, infill_edges
-    def get_vertices_edges(self):
-        infill_vertices = []
-        infill_edges = []
-        current_vertex = 0
-        if isinstance(self.multi_line_string, LineString):
-            line_vertices, line_edges = self.lineString_to_edges(self.multi_line_string)
-            infill_vertices.extend(line_vertices)
-            infill_edges.extend(line_edges)
 
-        elif hasattr(self.multi_line_string,"geoms"):
-            for line in self.multi_line_string.geoms:
-                line_vertices, line_edges = self.lineString_to_edges(line)
-                infill_vertices.extend(line_vertices)
-                infill_edges.extend(line_edges)
-        return (infill_vertices, infill_edges)
+    def get_vertices_edges(self):
+        mls = self.multi_line_string
+        coords = []
+        edges = []
+
+        for line in mls.geoms:
+            line_coords = np.asarray(line.coords, dtype=float)  # (N, 3)
+            if len(line_coords) < 2:
+                continue  # skip degenerate lines
+
+            start_idx = len(coords)
+            coords.extend(line_coords)
+
+            # edges connect consecutive points
+            idxs = np.arange(start_idx, start_idx + len(line_coords))
+            edges.extend(np.column_stack([idxs[:-1], idxs[1:]]))
+
+        coords = np.array(coords, dtype=float)  # (V, 3)
+        edges = np.array(edges, dtype=int)  # (E, 2)
+
+        # deduplicate vertices
+        uniq_coords, inv = np.unique(coords, axis=0, return_inverse=True)
+        edges = inv[edges]
+
+        return uniq_coords, edges
 
 
 

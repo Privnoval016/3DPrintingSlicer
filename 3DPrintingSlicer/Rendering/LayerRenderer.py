@@ -14,8 +14,6 @@ class LayerRenderer:
 
         # Determine overall x and y limits across all slices
 
-        print(self.z_slicer.get_slices()[0].vertices)
-
         for z_slice in self.z_slicer.get_slices():
             if len(z_slice.vertices) == 0:
                 continue
@@ -45,7 +43,6 @@ class LayerRenderer:
         for vertex in z_slice.vertices:
             ax.plot(vertex[0], vertex[1], 'bo')
 
-        print(f"Rendering slice at z={z} with {len(z_slice.vertices)} vertices and {len(z_slice.edges)} edges.")
         for edge in z_slice.edges:
             v1 = z_slice.vertices[edge[0]]
             v2 = z_slice.vertices[edge[1]]
