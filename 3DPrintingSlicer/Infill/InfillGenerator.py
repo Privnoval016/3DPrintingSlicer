@@ -7,6 +7,7 @@ class InfillGenerator:
         self.line_spacing = line_spacing
         self.tolerance = tolerance
         self.max_iterations = max_iterations
+        self.multi_line_string = MultiLineString()
 
     def gyroid_slice(self, x, z, vertical=False):
         z_sin = np.sin(z)
@@ -95,3 +96,21 @@ class InfillGenerator:
         if isinstance(merged, LineString):
             merged = [merged]
         return MultiLineString(merged)
+    
+    def get_vertices_edges(self):
+        infill_vertices = []
+        infill_edges = []
+        current_vertex = 0
+        for line in self.multi_line_string.geoms():
+            verticies = list(line)
+            for vertex in verticies:
+                if vertex == verticies[0]:
+                    continue
+                infill_vertices.append(verticies)
+                infill_edges.append((current_vertex, current_vertex+1))
+                current_vertex +=1
+        return (infill_vertices, infill_edges)
+
+
+
+
