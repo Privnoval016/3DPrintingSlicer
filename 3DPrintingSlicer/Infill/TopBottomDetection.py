@@ -15,13 +15,13 @@ class TopBottomDetection:
     def getSurfaces(self, tolerance=.5):
         top_normals = []
         bottom_normals = []
-        for face, normal in zip(self.zslicer.faces, self.zslicer.normals):
-            magnitude = np.linalg.norm(normal)
-            angle = np.arccos(np.dot(self.top_normal, normal)/ magnitude)
-            if np.abs(angle) < tolerance :
-                top_normals.append(face)
-            elif np.abs(angle - 180) < tolerance:
-                bottom_normals.append(face)
+        # for face, normal in zip(self.zslicer.faces, self.zslicer.normals):
+        #     magnitude = np.linalg.norm(normal)
+        #     angle = np.arccos(np.dot(self.top_normal, normal)/ magnitude)
+        #     if np.abs(angle) < tolerance :
+        #         top_normals.append(face)
+        #     elif np.abs(angle - 180) < tolerance:
+        #         bottom_normals.append(face)
         
         return (top_normals, bottom_normals)
     
