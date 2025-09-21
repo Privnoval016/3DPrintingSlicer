@@ -8,8 +8,11 @@ from matplotlib.widgets import Slider, CheckButtons, Button, TextBox
 import numpy as np
 
 
-class LayerVisualizer3D:
-    def __init__(self, z_slicer, line_color='blue', line_alpha=0.5, line_width=1):
+class GCodeVisualizer3D:
+    def __init__(self, z_slicer, gcode_evaluator, line_color='blue', line_alpha=0.5, line_width=1):
+        self.pressed_keys = set()
+        self.draw_operation_lines = True
+
         self.ignore_checkbox = False
         self.regen_button = None
         self.ignore_regen_callback = False
@@ -25,7 +28,9 @@ class LayerVisualizer3D:
         self.text_box = None
         self.load_button = None
         self.visible_slices = {}
+        self.visible_operation_lines = {}
         self.z_slicer = z_slicer
+        self.gcode_evaluator = gcode_evaluator
         self.slices = []
         self.line_color = line_color
         self.line_alpha = line_alpha
@@ -34,7 +39,6 @@ class LayerVisualizer3D:
         self.fig = None
         self.ax = None
 
-        self.current_index = 0
         self.all_lines = []
 
         self.show_all_previous = True
@@ -80,23 +84,81 @@ class LayerVisualizer3D:
 
 
     def on_key_press(self, event):
+        maximum = len(self.slices) - 1 if not self.draw_operation_lines else len(self.gcode_evaluator.operations) - 1
+
         if event.key in ['right', 'up']:
-            new_val = min(self.slider.val + 1, len(self.slices)-1)
+            new_val = min(self.slider.val + 1, maximum)
             self.slider.set_val(new_val)
+            return
         elif event.key in ['left', 'down']:
             new_val = max(self.slider.val - 1, 0)
             self.slider.set_val(new_val)
+            return
 
 
     def toggle_show_all(self, label):
         self.show_all_previous = not self.show_all_previous
-        self.update_slices(self.slider.val)
+        self.update_graphics(self.slider.val)
 
 
     def disable_slices(self):
         for lc in self.visible_slices.values():
             lc.remove()
         self.visible_slices = {}
+        self.fig.canvas.draw_idle()
+
+    def disable_operation_lines(self):
+        for line in self.visible_operation_lines.values():
+            line.remove()
+        self.visible_operation_lines = {}
+        self.gcode_evaluator.index = 0
+        self.fig.canvas.draw_idle()
+
+
+    def update_graphics(self, val):
+        if self.draw_operation_lines:
+            self.update_operation_lines(val)
+        else:
+            self.update_slices(val)
+
+
+    def update_operation_lines(self, val):
+        index = int(self.slider.val)
+
+        if index < 0 or index >= len(self.gcode_evaluator.operations):
+            return
+
+        if index < self.gcode_evaluator.index:
+            self.disable_operation_lines()
+
+        lines = []
+
+        while self.gcode_evaluator.index <= index:
+            start_pos = np.array(self.gcode_evaluator.actual_position.copy())
+            self.gcode_evaluator.execute_next_command()
+            end_pos = np.array(self.gcode_evaluator.actual_position.copy())
+
+            if not self.gcode_evaluator.can_draw():
+                continue
+
+            if np.array_equal(start_pos, end_pos):
+                continue
+
+            line = np.array([[start_pos[0], start_pos[1], start_pos[2]],
+                             [end_pos[0], end_pos[1], end_pos[2]]])
+
+            lines.append(line)
+
+
+        lc = Line3DCollection(lines, colors='red',
+                                linewidths=1,
+                                alpha=0.8)
+        self.ax.add_collection3d(lc)
+        self.visible_operation_lines[self.gcode_evaluator.index - 1] = lc
+
+        line_index = self.gcode_evaluator.index - 1
+
+        self.slider.label.set_text(f'Op #{line_index}')
         self.fig.canvas.draw_idle()
 
 
@@ -155,17 +217,26 @@ class LayerVisualizer3D:
         self.regenerate()
 
     def regenerate(self):
-        for lc in self.visible_slices.values():
-            lc.remove()
-        self.visible_slices.clear()
+        self.disable_slices()
+        self.disable_operation_lines()
 
         if not self.filename:
             return
 
-        self.z_slicer.compute_slices_from_stl(self.filename, specify_height=self.specify_height, num=self.generation_num)
-        self.current_index = 0
+        if self.filename.endswith('.stl') or self.filename.endswith('.STL'):
+            self.draw_operation_lines = False
+            self.z_slicer.compute_slices_from_stl(self.filename, specify_height=self.specify_height, num=self.generation_num)
+        else:
+            self.draw_operation_lines = True
+            self.gcode_evaluator.parse(self.filename)
+
         self.visible_slices = {}
-        self.load_slices()
+        self.visible_operation_lines = {}
+
+        if not self.draw_operation_lines:
+            self.load_slices()
+        else:
+            self.load_from_gcode()
 
     def on_checkbox(self, label):
         if self.ignore_checkbox:
@@ -173,11 +244,9 @@ class LayerVisualizer3D:
 
         self.ignore_checkbox = True
 
-        # Determine which checkbox was clicked
         if label == 'Layer Thickness':
             self.specify_height_cached = True
-            # Ensure mutual exclusivity
-            if not self.height_toggle_checkbox.get_status()[0]:  # if A is unchecked, toggle back on
+            if not self.height_toggle_checkbox.get_status()[0]:
                 self.height_toggle_checkbox.set_active(0)
             if self.height_toggle_checkbox.get_status()[1]:
                 self.height_toggle_checkbox.set_active(1)
@@ -197,13 +266,13 @@ class LayerVisualizer3D:
             return
 
         try:
-            value = int(text)
-            if value > 0:
-                self.gen_num_cached = value
-            else:
-                print("Please enter a positive integer.")
+            value = float(text)
+            if value <= 0:
+                print("Please enter a positive number.")
+                return
+            self.gen_num_cached = value
         except ValueError:
-            print("Invalid input. Please enter a positive integer.")
+            print("Invalid input. Please enter a positive number.")
 
     def update_generation(self, event):
         if ((self.generation_num == self.gen_num_cached and self.specify_height_cached == self.specify_height)
@@ -221,14 +290,14 @@ class LayerVisualizer3D:
             print("Layer height too large for model height.")
             return
 
-        if not self.specify_height_cached and self.gen_num_cached <= 1:
+        if not self.specify_height_cached and (self.gen_num_cached <= 1 or not isinstance(self.gen_num_cached, int)):
             self.ignore_regen_callback = True
             self.text_box.set_val(str(self.generation_num))
             self.gen_num_cached = self.generation_num
             if self.specify_height_cached != self.specify_height:
                 self.height_toggle_checkbox.set_active(0)  # Uncheck the box if the cache is different from the actual value
             self.ignore_regen_callback = False
-            print("Number of layers must be greater than 1.")
+            print("Number of layers must be an integer greater than 1.")
             return
 
         self.generation_num = self.gen_num_cached
@@ -252,7 +321,7 @@ class LayerVisualizer3D:
             valstep=1,
             orientation='vertical'
         )
-        self.slider.on_changed(self.update_slices)
+        self.slider.on_changed(self.update_graphics)
 
         # Checkbutton for showing all previous layers
         ax_layer_checkbox = plt.axes([0.01, 0.05, 0.2, 0.2])
@@ -272,6 +341,7 @@ class LayerVisualizer3D:
                                                            [self.specify_height, not self.specify_height])
         self.height_toggle_checkbox.on_clicked(self.on_checkbox)
 
+
         # Text box for entering generation number
         ax_text = plt.axes(
             [0.1, 0.44, 0.1, 0.05])  # [left, bottom, width, height]
@@ -289,6 +359,8 @@ class LayerVisualizer3D:
 
         self.fig.canvas.mpl_connect('key_press_event', self.on_key_press)
 
+
+    # TODO: For loading from an stl specifically and not G-code; need to update when slices will correspond to gcode commands
     def load_slices(self):
         self.slices = self.z_slicer.get_slices()
 
@@ -297,20 +369,47 @@ class LayerVisualizer3D:
         self.ax.set_ylim(self.y_min - 1, self.y_max + 1)
         self.ax.set_zlim(self.z_min - 1, self.z_max + 1)
 
+        self.toggle_layer_ui(True)
+
         self.slider.valmin = 0
-        self.slider.valmax = len(self.z_slicer.get_slices()) - 1
+        self.slider.valmax = len(self.slices) - 1
         self.slider.ax.set_ylim(0, max(0, len(self.slices) - 1))
         self.slider.set_val(0)
 
-        self.update_slices(0)
+        self.update_graphics(0)
+
+    # For loading from G-code specifically and not an stl
+    def load_from_gcode(self):
+        self.ax.set_xlim(117-35, 35 + 117)
+        self.ax.set_ylim(117-35, 35 + 117)
+        self.ax.set_zlim(0, 70)
+
+        self.toggle_layer_ui(False)
+
+        self.slider.valmin = 0
+        self.slider.valmax = len(self.gcode_evaluator.operations) - 1
+        self.slider.ax.set_ylim(0, max(0, len(self.gcode_evaluator.operations) - 1))
+        self.slider.set_val(0)
+
+        self.update_graphics(0)
+
+    def toggle_layer_ui(self, visible):
+        self.show_layers_checkbox.ax.set_visible(visible)
+        self.regen_button.ax.set_visible(visible)
+        self.height_toggle_checkbox.ax.set_visible(visible)
+        self.text_box.ax.set_visible(visible)
+
+        self.fig.canvas.draw_idle()
 
     def show(self):
         plt.show()
 
 def pick_file():
-    # QApplication must exist only once
     app = QApplication.instance() or QApplication(sys.argv)
     filename, _ = QFileDialog.getOpenFileName(
-        None, "Select STL file", "", "STL Files (*.stl);;All Files (*)"
+        None,
+        "Select STL or GCODE file",
+        "",
+        "STL Files (*.stl);;GCODE Files (*.gcode);;All Files (*)"
     )
     return filename

@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import struct
 
@@ -7,6 +9,25 @@ def get_min_max_z(vertices):
     max_z = np.max(vertices[:, 2])
     min_z = np.min(vertices[:, 2])
     return min_z, max_z
+
+
+def check_if_ascii(filename):
+    with open(filename, 'rb') as f:
+        header = f.read(80)
+        f.seek(0)
+        first_line = f.readline().decode(errors='ignore').strip().lower()
+
+        if first_line.startswith('solid'):
+            f.seek(80)
+            num_triangles_bytes = f.read(4)
+            if len(num_triangles_bytes) < 4:
+                return True
+            num_triangles = struct.unpack('<I', num_triangles_bytes)[0]
+            expected_size = 84 + num_triangles * 50
+            actual_size = os.path.getsize(filename)
+            return False if actual_size == expected_size else True
+        else:
+            return False
 
 
 class ZSlicer:
@@ -26,11 +47,7 @@ class ZSlicer:
     def compute_slices_from_stl(self, file_name, specify_height=False, num=50):
         self.file_name = file_name
 
-        is_ascii = False
-
-        with open(file_name, "rb") as f:
-            header = f.read(80)
-            is_ascii = b"solid" in header[:5].lower()
+        is_ascii = check_if_ascii(file_name)
 
         self.load_ascii_stl(file_name) if is_ascii else self.read_binary_stl(file_name)
         self.min_z, self.max_z = get_min_max_z(self.vertices)
