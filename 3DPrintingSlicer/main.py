@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 
 def main():
-    file_name = "STLFiles/LowPolyBenchy.stl"
+    file_name = "STLFiles/20mm_cube.stl"
 
     line_width = .5
     wall_count = 4
