@@ -26,7 +26,7 @@ def main():
         infill_generator = InfillGenerator()
         infill = infill_generator.create_infill(perimeter_generator.polygons, line_width, wall_count, z_slice.z0)
         print('Infill Generation Done')
-        infill_vertices, infill_edges = infill_generator.get_vertices_edges
+        infill_vertices, infill_edges = infill_generator.get_vertices_edges()
         infill_slice = InfillSlice(z0, perimeters, infill_vertices, infill_edges)
 
         fig, ax = plt.subplots()

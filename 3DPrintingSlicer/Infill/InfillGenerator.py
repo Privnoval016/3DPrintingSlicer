@@ -97,18 +97,31 @@ class InfillGenerator:
             merged = [merged]
         return MultiLineString(merged)
     
+    def lineString_to_edges(self, line):
+        infill_vertices = []
+        infill_edges = []
+        verticies = list(line)
+        for vertex in verticies:
+            if vertex == verticies[0]:
+                continue
+            infill_vertices.append(verticies)
+            infill_edges.append((current_vertex, current_vertex+1))
+            current_vertex +=1
+        return infill_vertices, infill_edges
     def get_vertices_edges(self):
         infill_vertices = []
         infill_edges = []
         current_vertex = 0
-        for line in self.multi_line_string.geoms():
-            verticies = list(line)
-            for vertex in verticies:
-                if vertex == verticies[0]:
-                    continue
-                infill_vertices.append(verticies)
-                infill_edges.append((current_vertex, current_vertex+1))
-                current_vertex +=1
+        if isinstance(self.multi_line_string, LineString):
+            line_vertices, line_edges = self.lineString_to_edges(self.multi_line_string)
+            infill_vertices.extend(line_vertices)
+            infill_edges.extend(line_edges)
+
+        elif hasattr(self.multi_line_string,"geoms"):
+            for line in self.multi_line_string.geoms:
+                line_vertices, line_edges = self.lineString_to_edges(line)
+                infill_vertices.extend(line_vertices)
+                infill_edges.extend(line_edges)
         return (infill_vertices, infill_edges)
 
 
