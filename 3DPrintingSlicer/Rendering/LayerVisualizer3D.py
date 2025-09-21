@@ -10,16 +10,18 @@ import numpy as np
 
 class LayerVisualizer3D:
     def __init__(self, z_slicer, line_color='blue', line_alpha=0.5, line_width=1):
-        self.switching_toggle_back = False
+        self.ignore_checkbox = False
         self.regen_button = None
         self.ignore_regen_callback = False
         self.gen_num_cached = 1
-        self.specify_height_cached = True
         self.height_toggle_checkbox = None
         self.un_height_toggle_checkbox = None
         self.filename = None
         self.generation_num = 1
+
         self.specify_height = True
+        self.specify_height_cached = False
+
         self.text_box = None
         self.load_button = None
         self.visible_slices = {}
@@ -44,9 +46,9 @@ class LayerVisualizer3D:
 
 
     def _compute_axis_limits(self):
-        x_dim = np.empty(2)
-        y_dim = np.empty(2)
-        z_dim = np.empty(2)
+        x_dim = np.zeros(2)
+        y_dim = np.zeros(2)
+        z_dim = np.zeros(2)
 
         for z_slice in self.z_slicer.get_slices():
             if len(z_slice.vertices) == 0:
@@ -123,6 +125,10 @@ class LayerVisualizer3D:
             edges = slice_data.edges
             lines = np.array(
                 [[vertices[edge[0]], vertices[edge[1]]] for edge in edges])
+
+            if len(lines) == 0:
+                continue
+
             lc = Line3DCollection(lines, colors=self.line_color,
                                   linewidths=self.line_width,
                                   alpha=self.line_alpha)
@@ -161,24 +167,29 @@ class LayerVisualizer3D:
         self.visible_slices = {}
         self.load_slices()
 
-    def toggle_specify_height(self, label):
-        if self.switching_toggle_back:
+    def on_checkbox(self, label):
+        if self.ignore_checkbox:
             return
 
-        self.switching_toggle_back = True
-        self.specify_height_cached = True
-        self.un_height_toggle_checkbox.set_active(0)
-        self.switching_toggle_back = False
+        self.ignore_checkbox = True
 
+        # Determine which checkbox was clicked
+        if label == 'Layer Thickness':
+            self.specify_height_cached = True
+            # Ensure mutual exclusivity
+            if not self.height_toggle_checkbox.get_status()[0]:  # if A is unchecked, toggle back on
+                self.height_toggle_checkbox.set_active(0)
+            if self.height_toggle_checkbox.get_status()[1]:
+                self.height_toggle_checkbox.set_active(1)
 
-    def toggle_un_specify_height(self, label):
-        if self.switching_toggle_back:
-            return
+        elif label == 'Number of Layers':
+            self.specify_height_cached = False
+            if self.height_toggle_checkbox.get_status()[0]:
+                self.height_toggle_checkbox.set_active(0)
+            if not self.height_toggle_checkbox.get_status()[1]:
+                self.height_toggle_checkbox.set_active(1)
 
-        self.switching_toggle_back = True
-        self.specify_height_cached = False
-        self.height_toggle_checkbox.set_active(0)
-        self.switching_toggle_back = False
+        self.ignore_checkbox = False
 
 
     def update_generation_num_cached(self, text):
@@ -215,7 +226,7 @@ class LayerVisualizer3D:
             self.text_box.set_val(str(self.generation_num))
             self.gen_num_cached = self.generation_num
             if not self.specify_height_cached == self.specify_height:
-                self.height_toggle_checkbox.set_active(0)  # Uncheck the box if the cache is different from the actual value
+                self.height_toggle_checkbox.set_active(1)  # Uncheck the box if the cache is different from the actual value
             self.ignore_regen_callback = False
             print("Number of layers must be greater than 1.")
             return
@@ -256,18 +267,10 @@ class LayerVisualizer3D:
 
         # Checkbox for specifying layer thickness
         ax_gen_checkbox = plt.axes([0.01, 0.5, 0.11, 0.22])
-        self.height_toggle_checkbox = CheckButtons(ax_gen_checkbox, ['Specify Layer Thickness'],
-                                                   [self.specify_height])
-        self.height_toggle_checkbox.labels[0].set_fontsize(8)
-        self.height_toggle_checkbox.on_clicked(self.toggle_specify_height)
-
-        # Checkbox for specifying number of layers
-        ax_gen_checkbox = plt.axes([0.12, 0.5, 0.11, 0.22])
-        self.un_height_toggle_checkbox = CheckButtons(ax_gen_checkbox, [
-            'Specify Number of Layers'],
-                                                   [not self.specify_height])
-        self.un_height_toggle_checkbox.labels[0].set_fontsize(8)
-        self.un_height_toggle_checkbox.on_clicked(self.toggle_specify_height)
+        self.height_toggle_checkbox = CheckButtons(ax_gen_checkbox,
+                                                           ['Layer Thickness', 'Number of Layers'],
+                                                           [self.specify_height, not self.specify_height])
+        self.height_toggle_checkbox.on_clicked(self.on_checkbox)
 
         # Text box for entering generation number
         ax_text = plt.axes(
